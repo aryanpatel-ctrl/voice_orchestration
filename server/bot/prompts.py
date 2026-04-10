@@ -19,14 +19,20 @@ def get_greeting_prompt(call_state: CallState) -> str:
     This is the `role_message` field in NodeConfig, set once on the greeting node.
     It persists across all state transitions.
     """
-    # In production, clinic details come from DB. For now, hardcoded.
-    clinic_name = "Bright Smile Dental"
-    clinic_phone = "(555) 123-4567"
-    clinic_hours = "Monday-Friday 8am-5pm, Saturday 9am-1pm"
-    clinic_address = "123 Main Street, Suite 100"
-    services = "cleaning, filling, crown, root canal, whitening, emergency exam"
-    providers = "Dr. Sarah Chen (Mon/Wed/Fri), Dr. James Park (Tue/Thu/Sat)"
-    insurance = "Delta Dental, Cigna, Aetna, MetLife, Guardian, United Healthcare"
+    # Load clinic details from DB config, fall back to defaults for testing
+    config = call_state.clinic_config
+    clinic_name = config.get("name", "Bright Smile Dental")
+    clinic_phone = config.get("phone", "(555) 123-4567")
+    clinic_hours = _format_hours_for_prompt(config.get("hours_json", {})) or "Monday-Friday 8am-5pm, Saturday 9am-1pm"
+    clinic_address = config.get("address", "123 Main Street, Suite 100")
+    services = ", ".join(
+        s if isinstance(s, str) else s.get("name", str(s))
+        for s in config.get("services", ["cleaning", "filling", "crown", "root canal", "whitening", "emergency exam"])
+    )
+    providers = _format_providers_for_prompt(config.get("providers", [])) or "Dr. Sarah Chen (Mon/Wed/Fri), Dr. James Park (Tue/Thu/Sat)"
+    insurance = ", ".join(
+        config.get("insurance_accepted", ["Delta Dental", "Cigna", "Aetna", "MetLife", "Guardian", "United Healthcare"])
+    )
 
     context_block = call_state.build_context_block()
     context_section = f"\n\n{context_block}" if context_block else ""
@@ -205,3 +211,35 @@ If they're done, say goodbye warmly: "You're all set! {closing} Have a great day
 Then call end_call with a brief summary.
 
 If they have another question or request, call patient_has_more."""
+
+
+# =============================================================================
+# Helpers for dynamic prompt formatting
+# =============================================================================
+
+
+def _format_hours_for_prompt(hours_json: dict) -> str:
+    """Format hours_json into a concise string for the LLM prompt."""
+    if not hours_json:
+        return ""
+    parts = []
+    for day, hours in hours_json.items():
+        if isinstance(hours, dict):
+            parts.append(f"{day.title()} {hours.get('open', '?')}-{hours.get('close', '?')}")
+    return ", ".join(parts)
+
+
+def _format_providers_for_prompt(providers: list) -> str:
+    """Format providers list into a concise string for the LLM prompt."""
+    if not providers:
+        return ""
+    parts = []
+    for p in providers:
+        if isinstance(p, dict):
+            name = p.get("name", "")
+            schedule = p.get("schedule", {})
+            days = [d[:3].title() for d in schedule.keys()] if schedule else []
+            parts.append(f"{name} ({'/'.join(days)})" if days else name)
+        else:
+            parts.append(str(p))
+    return ", ".join(parts)

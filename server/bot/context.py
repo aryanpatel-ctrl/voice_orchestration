@@ -187,6 +187,14 @@ class CallState:
     outcome: Optional[str] = None  # booked, rescheduled, cancelled, transferred, info
     started_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
+    # Phase 2: Database + multi-tenant fields
+    db_session: Optional[object] = field(default=None, repr=False)
+    clinic_config: dict = field(default_factory=dict)
+    caller_phone: Optional[str] = None
+    called_number: Optional[str] = None
+    recording_url: Optional[str] = None
+    clinic_timezone: str = "America/Los_Angeles"
+
     # Async summarization
     _summarize_task: Optional[asyncio.Task] = field(default=None, repr=False)
 
